@@ -193,6 +193,38 @@
   .bar-pct { font-size: 12px; color: #888780; min-width: 32px; text-align: right; }
   .placeholder-msg { font-size: 13px; color: #b4b2a9; text-align: center; padding: 24px 0; }
   canvas#color-canvas { display: none; }
+
+  /* API key banner */
+  .api-banner {
+    background: #fff; border: 0.5px solid rgba(0,0,0,0.1);
+    border-radius: 12px; padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .api-banner.connected { border-color: rgba(59,109,17,0.35); background: #f2f7f2; }
+  .api-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .api-key-input {
+    flex: 1; min-width: 200px; padding: 7px 11px;
+    border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px;
+    font-size: 13px; font-family: monospace; background: #fafaf8;
+    color: #1a1a18; outline: none;
+  }
+  .api-key-input:focus { border-color: rgba(0,0,0,0.3); }
+  .api-key-btn {
+    padding: 7px 14px; border-radius: 8px; border: none; cursor: pointer;
+    background: #1a1a18; color: #f8f7f4; font-size: 12px;
+    font-weight: 500; font-family: inherit; white-space: nowrap;
+  }
+  .api-key-btn:hover { opacity: 0.82; }
+  .api-status { font-size: 12px; margin-top: 8px; }
+  .api-status.ok  { color: #3B6D11; }
+  .api-status.off { color: #888780; }
+  @media (prefers-color-scheme: dark) {
+    .api-banner { background: #242420; border-color: rgba(255,255,255,0.08); }
+    .api-banner.connected { background: #1e2820; border-color: rgba(59,109,17,0.35); }
+    .api-key-input { background: #2a2a26; border-color: rgba(255,255,255,0.1); color: #e8e6df; }
+    .api-key-btn { background: #e8e6df; color: #1a1a18; }
+    .api-status.off { color: #5f5e5a; }
+  }
 </style>
 </head>
 <body>
@@ -201,6 +233,18 @@
 
   <h1>감성 → 향 공식 매핑</h1>
   <p class="subtitle">글 또는 사진으로 오늘의 감성을 전달하면 향 조합으로 번역합니다.</p>
+
+  <!-- API KEY BANNER -->
+  <div class="api-banner" id="api-banner">
+    <div class="section-label" style="margin-bottom:8px">Anthropic API 키 — AI 사진 분석 활성화</div>
+    <div class="api-row">
+      <input class="api-key-input" id="api-key-input" type="password"
+        placeholder="sk-ant-..." autocomplete="off">
+      <button class="api-key-btn" onclick="saveApiKey()">연결</button>
+      <button class="api-key-btn" id="api-clear-btn" onclick="clearApiKey()" style="background:#f1efe8;color:#888780;border:0.5px solid rgba(0,0,0,0.12);display:none">해제</button>
+    </div>
+    <div class="api-status off" id="api-status">키 없음 — 텍스트는 로컬 분석, 사진은 색상 분석으로 작동합니다</div>
+  </div>
 
   <!-- STEP 0 -->
   <div class="flow-label"><span class="flow-step">0</span> 감성 입력 — 분석</div>
@@ -581,7 +625,16 @@ function removeImage() {
   document.getElementById('drop-zone').querySelector('input').value = '';
 }
 
-function analyze() {
+async function analyze() {
+  const apiKey = window._apiKey || '';
+
+  // If API key present → use Claude for both text and image
+  if (apiKey) {
+    await analyzeWithClaude(apiKey);
+    return;
+  }
+
+  // No API key → client-side fallback
   let result;
 
   if (currentMode === 'text') {
@@ -707,6 +760,141 @@ function selectConc(btn) {
   document.getElementById('r-conc').textContent = CONC_INFO[activeConc].label;
   document.getElementById('r-dur').textContent  = CONC_INFO[activeConc].dur;
 }
+
+// ── API Key management ─────────────────────────────────────────────────────
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key.startsWith('sk-ant-')) {
+    document.getElementById('api-status').textContent = '올바른 Anthropic API 키 형식이 아닙니다 (sk-ant-... 로 시작해야 합니다)';
+    document.getElementById('api-status').className = 'api-status off';
+    return;
+  }
+  window._apiKey = key;
+  document.getElementById('api-key-input').value = '';
+  document.getElementById('api-status').textContent = '✓ 연결됨 — Claude가 텍스트와 사진을 직접 분석합니다';
+  document.getElementById('api-status').className = 'api-status ok';
+  document.getElementById('api-banner').classList.add('connected');
+  document.getElementById('api-clear-btn').style.display = '';
+}
+
+function clearApiKey() {
+  window._apiKey = '';
+  document.getElementById('api-status').textContent = '키 없음 — 텍스트는 로컬 분석, 사진은 색상 분석으로 작동합니다';
+  document.getElementById('api-status').className = 'api-status off';
+  document.getElementById('api-banner').classList.remove('connected');
+  document.getElementById('api-clear-btn').style.display = 'none';
+}
+
+// allow Enter key in API input
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('api-key-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveApiKey();
+  });
+});
+
+// ── Claude API analysis ────────────────────────────────────────────────────
+async function analyzeWithClaude(apiKey) {
+  if (currentMode === 'text' && !document.getElementById('ai-text-input').value.trim()) return;
+  if (currentMode === 'image' && !loadedImg) return;
+
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true;
+  btn.textContent = '분석 중...';
+
+  const ingList = INGS.map((g,i) => i+':'+g.name).join(', ');
+  const systemPrompt =
+    '당신은 감성을 향으로 번역하는 조향 AI입니다. ' +
+    '사용자의 텍스트나 사진에서 감성을 분석하고 12가지 원액 각각에 0~100 가중치를 할당합니다. ' +
+    '반드시 JSON만 응답하고, 마크다운 없이 순수 JSON만 출력하세요.';
+
+  const taskPrompt =
+    '다음 입력의 감성을 분석해서 12가지 조향 원액의 비율을 결정하세요.\n\n' +
+    '원액 목록 (인덱스:이름): ' + ingList + '\n\n' +
+    '아래 JSON 형식으로만 응답하세요:\n' +
+    '{\n' +
+    '  "fragrance_name": "이 감성에 어울리는 향 이름 (15자 이내, 한국어)",\n' +
+    '  "summary": "이 감성에 대한 해석 2~3문장",\n' +
+    '  "keywords": ["감성을 표현하는 핵심 단어 2~4개, 자유롭게"],\n' +
+    '  "vectors": {"시간성":0~100, "공간성":0~100, "감정온도":0~100, "각성":0~100},\n' +
+    '  "weights": [0번가중치, 1번, 2번, 3번, 4번, 5번, 6번, 7번, 8번, 9번, 10번, 11번]\n' +
+    '}\n' +
+    'weights는 12개 숫자 배열입니다.';
+
+  let userContent;
+  if (currentMode === 'text') {
+    const text = document.getElementById('ai-text-input').value.trim();
+    userContent = [{ type:'text', text: '입력: "' + text + '"\n\n' + taskPrompt }];
+  } else {
+    const canvas = document.getElementById('color-canvas');
+    const dataUrl = canvas.toDataURL ? (() => {
+      const c = document.createElement('canvas');
+      c.width = 800; c.height = 600;
+      c.getContext('2d').drawImage(loadedImg, 0, 0, 800, 600);
+      return c.toDataURL('image/jpeg', 0.8);
+    })() : '';
+    const b64 = dataUrl.split(',')[1] || '';
+    const memo = document.getElementById('img-memo').value.trim();
+    userContent = [
+      { type:'image', source:{ type:'base64', media_type:'image/jpeg', data: b64 } },
+      { type:'text', text: (memo ? '추가 메모: "' + memo + '"\n\n' : '') + taskPrompt }
+    ];
+  }
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: [{ role:'user', content: userContent }]
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || res.status);
+    const raw    = data.content?.find(b => b.type==='text')?.text || '';
+    const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+
+    const total = (parsed.weights||[]).reduce((a,b)=>a+b,0)||1;
+    baseWeights = parsed.weights.map(v => Math.round(v/total*100));
+    fragName    = parsed.fragrance_name || '무제의 향';
+    fragDesc    = parsed.summary || '';
+
+    const VEC_COLORS = ["#854F0B","#3B6D11","#993556","#534AB7"];
+    document.getElementById('vec-bars').innerHTML =
+      Object.entries(parsed.vectors||{}).map(([k,v],i) =>
+        '<div class="vec-row">' +
+        '<div class="vec-label" style="font-size:11px">'+k+'</div>' +
+        '<div class="vec-track"><div class="vec-fill" style="width:'+Math.min(v,100)+'%;background:'+VEC_COLORS[i%4]+'"></div></div>' +
+        '<div class="vec-pct">'+Math.min(Math.round(v),100)+'%</div>' +
+        '</div>'
+      ).join('');
+
+    document.getElementById('r-summary').textContent = fragDesc;
+    document.getElementById('kw-tags').innerHTML = (parsed.keywords||[]).map(k =>
+      '<span class="kw-tag">'+k+'</span>').join('');
+    document.getElementById('done-badge').textContent = '✓ ' + fragName;
+    document.getElementById('input-section').style.display = 'none';
+    document.getElementById('result-section').style.display = '';
+    render();
+    setTimeout(() => {
+      document.querySelector('.flow-label[data-step="1"]')
+        ?.scrollIntoView({ behavior:'smooth', block:'start' });
+    }, 200);
+
+  } catch(e) {
+    alert('분석 오류: ' + e.message + '\nAPI 키를 확인해주세요.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '감성 분석하기';
+  }
+}
+
 </script>
 </body>
 </html>
