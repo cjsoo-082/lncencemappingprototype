@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>감성 → 향 공식 매핑</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f8f7f4; color: #1a1a18;
+    min-height: 100vh; padding: 2rem 1rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a18; color: #e8e6df; }
+    .card { background: #242420; border-color: rgba(255,255,255,0.08); }
+    .card-conc { background: #1e2820; border-color: rgba(59,109,17,0.35); }
+    .mode-btn { background: #2e2e2a; border-color: rgba(255,255,255,0.1); color: #888780; }
+    .mode-btn.active { background: #e8e6df; color: #1a1a18; border-color: #e8e6df; }
+    .input-area { background: #2a2a26; border-color: rgba(255,255,255,0.1); color: #e8e6df; }
+    .input-area:focus { border-color: rgba(255,255,255,0.3); }
+    .drop-zone { background: #242420; border-color: rgba(255,255,255,0.12); }
+    .drop-zone:hover, .drop-zone.dragover { border-color: rgba(255,255,255,0.3); background: #2e2e2a; }
+    .drop-hint { color: #888780; }
+    .drop-hint b { color: #e8e6df; }
+    .analyze-btn { background: #e8e6df; color: #1a1a18; }
+    .ai-summary { background: #2e2e2a; border-color: rgba(255,255,255,0.06); color: #b4b2a9; }
+    .kw-tag { background: #2e2e2a; color: #b4b2a9; border-color: rgba(255,255,255,0.08); }
+    .section-label { color: #888780; }
+    .dial-label { color: #e8e6df; }
+    .dial-hint { color: #888780; }
+    .bar-label { color: #b4b2a9; }
+    .bar-pct { color: #888780; }
+    .bar-track { background: rgba(255,255,255,0.08); }
+    .conc-btn { background: #2a302a; border-color: rgba(255,255,255,0.1); color: #888780; }
+    .conc-btn.active { background: #223322; border-color: #3B6D11; color: #97c459; }
+    .conc-note { color: #888780; }
+    .output-row { border-color: rgba(255,255,255,0.08); }
+    .output-cell { border-right-color: rgba(255,255,255,0.06); }
+    .output-key { color: #888780; }
+    .output-val { color: #e8e6df; }
+    .result-card { background: #2e2e2a; border-color: rgba(255,255,255,0.08); }
+    .result-desc { color: #b4b2a9; }
+    .flow-label { color: #888780; }
+    .flow-step { background: rgba(255,255,255,0.08); color: #888780; }
+    .reset-link { color: #888780; }
+    .img-remove { background: rgba(0,0,0,0.7); }
+    .img-preview-wrap { border-color: rgba(255,255,255,0.1); }
+    .placeholder-msg { color: #444441; }
+    .vec-track { background: rgba(255,255,255,0.08); }
+    .vec-label { color: #b4b2a9; }
+    .vec-pct { color: #888780; }
+  }
+
+  .container { max-width: 680px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #888780; margin-bottom: 2rem; }
+
+  .flow-label {
+    font-size: 11px; color: #888780; font-weight: 500;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .flow-step {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: rgba(0,0,0,0.07); font-size: 10px; font-weight: 600;
+    color: #888780; flex-shrink: 0;
+  }
+  .card {
+    background: #fff; border: 0.5px solid rgba(0,0,0,0.1);
+    border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem;
+  }
+  .card-conc {
+    background: #f2f7f2; border: 1px solid rgba(59,109,17,0.22);
+    border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem;
+  }
+  .section-label {
+    font-size: 11px; color: #888780; text-transform: uppercase;
+    letter-spacing: 0.07em; font-weight: 500; margin-bottom: 10px;
+  }
+  .mode-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .mode-btn {
+    flex: 1; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    border: 0.5px solid rgba(0,0,0,0.12); background: #f1efe8; color: #888780;
+    font-size: 12px; font-weight: 500; font-family: inherit; transition: all 0.15s; text-align: center;
+  }
+  .mode-btn.active { background: #1a1a18; color: #f8f7f4; border-color: #1a1a18; }
+  .mode-btn:hover:not(.active) { background: #e8e6df; }
+  .mode-icon { font-size: 14px; display: block; margin-bottom: 2px; }
+
+  .input-area {
+    width: 100%; min-height: 92px; resize: vertical;
+    border: 0.5px solid rgba(0,0,0,0.15); border-radius: 10px;
+    padding: 12px 14px; font-size: 14px; line-height: 1.6;
+    font-family: inherit; background: #fafaf8; color: #1a1a18;
+    outline: none; transition: border-color 0.15s;
+  }
+  .input-area:focus { border-color: rgba(0,0,0,0.35); }
+  .input-area::placeholder { color: #b4b2a9; }
+
+  .drop-zone {
+    border: 1.5px dashed rgba(0,0,0,0.15); border-radius: 10px;
+    padding: 32px 20px; text-align: center; cursor: pointer;
+    transition: all 0.15s; background: #fafaf8; position: relative;
+  }
+  .drop-zone:hover, .drop-zone.dragover { border-color: rgba(0,0,0,0.35); background: #f1efe8; }
+  .drop-icon { font-size: 28px; margin-bottom: 8px; opacity: 0.4; }
+  .drop-hint { font-size: 13px; color: #888780; line-height: 1.5; }
+  .drop-hint b { color: #1a1a18; font-weight: 500; }
+  .drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .img-preview-wrap {
+    position: relative; border-radius: 10px; overflow: hidden;
+    border: 0.5px solid rgba(0,0,0,0.1); margin-bottom: 4px;
+  }
+  .img-preview { width: 100%; max-height: 240px; object-fit: cover; display: block; }
+  .img-remove {
+    position: absolute; top: 8px; right: 8px;
+    background: rgba(0,0,0,0.5); color: #fff; border: none;
+    border-radius: 50%; width: 26px; height: 26px; cursor: pointer;
+    font-size: 13px; display: flex; align-items: center; justify-content: center;
+  }
+  .img-caption { font-size: 11px; color: #888780; margin-bottom: 8px; }
+
+  .analyze-btn {
+    margin-top: 10px; width: 100%; padding: 10px; border-radius: 8px;
+    border: none; cursor: pointer; background: #1a1a18; color: #f8f7f4;
+    font-size: 13px; font-weight: 500; font-family: inherit; transition: opacity 0.15s;
+  }
+  .analyze-btn:hover { opacity: 0.82; }
+  .analyze-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .ai-summary {
+    font-size: 13px; color: #5f5e5a; line-height: 1.65;
+    padding: 10px 13px; background: #f8f7f4; border-radius: 8px;
+    border: 0.5px solid rgba(0,0,0,0.07); margin-bottom: 14px;
+  }
+  .kw-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .kw-tag {
+    font-size: 12px; padding: 4px 11px; border-radius: 20px;
+    background: #f1efe8; color: #5f5e5a; border: 0.5px solid rgba(0,0,0,0.08);
+  }
+
+  .vec-row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+  .vec-label { font-size: 12px; color: #5f5e5a; width: 64px; flex-shrink: 0; }
+  .vec-track { flex: 1; height: 4px; background: rgba(0,0,0,0.06); border-radius: 2px; overflow: hidden; }
+  .vec-fill  { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+  .vec-pct   { font-size: 11px; color: #888780; min-width: 28px; text-align: right; }
+
+  .done-bar {
+    display: flex; align-items: center; justify-content: space-between; margin-top: 12px;
+  }
+  .done-badge {
+    font-size: 12px; color: #3B6D11; background: #eaf3de;
+    padding: 5px 11px; border-radius: 20px; border: 0.5px solid rgba(59,109,17,0.25);
+  }
+  .reset-link { font-size: 12px; color: #888780; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  .reset-link:hover { color: #1a1a18; }
+
+  .dial-row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .dial-item { flex: 1; min-width: 160px; }
+  .dial-label { font-size: 12px; color: #1a1a18; margin-bottom: 4px; font-weight: 500; }
+  .dial-hint { font-size: 11px; color: #888780; margin-top: 3px; line-height: 1.4; }
+  input[type=range] { width: 100%; accent-color: #3B6D11; }
+
+  .conc-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+  .conc-btn {
+    padding: 10px 6px; border-radius: 8px; cursor: pointer; text-align: center;
+    border: 0.5px solid rgba(0,0,0,0.1); background: #f1efe8; color: #888780; transition: all 0.15s;
+  }
+  .conc-btn:hover:not(.active) { background: #e8e6df; }
+  .conc-btn.active { background: #eaf3de; border-color: #3B6D11; color: #27500a; }
+  .conc-btn .conc-name { font-size: 12px; font-weight: 500; margin-bottom: 2px; }
+  .conc-btn .conc-pct  { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .conc-btn .conc-dur  { font-size: 10px; opacity: 0.7; }
+  .conc-note { font-size: 11px; color: #5f5e5a; margin-top: 10px; line-height: 1.5; }
+
+  .output-row {
+    display: flex; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 10px;
+    overflow: hidden; margin-bottom: 14px;
+  }
+  .output-cell { flex: 1; padding: 10px 12px; text-align: center; border-right: 0.5px solid rgba(0,0,0,0.07); }
+  .output-cell:last-child { border-right: none; }
+  .output-key { font-size: 10px; color: #888780; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+  .output-val { font-size: 14px; font-weight: 500; color: #1a1a18; }
+  .result-card { background: #f8f7f4; border-radius: 10px; padding: 14px 16px; border: 0.5px solid rgba(0,0,0,0.07); }
+  .result-desc { font-size: 13px; color: #5f5e5a; line-height: 1.6; }
+
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .bar-label { font-size: 12px; color: #5f5e5a; width: 90px; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 5px; background: rgba(0,0,0,0.06); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .bar-pct { font-size: 12px; color: #888780; min-width: 32px; text-align: right; }
+  .placeholder-msg { font-size: 13px; color: #b4b2a9; text-align: center; padding: 24px 0; }
+  canvas#color-canvas { display: none; }
+</style>
+</head>
+<body>
+<canvas id="color-canvas"></canvas>
+<div class="container">
+
+  <h1>감성 → 향 공식 매핑</h1>
+  <p class="subtitle">글 또는 사진으로 오늘의 감성을 전달하면 향 조합으로 번역합니다.</p>
+
+  <!-- STEP 0 -->
+  <div class="flow-label"><span class="flow-step">0</span> 감성 입력 — 분석</div>
+  <div class="card" id="card-step0">
+    <div id="input-section">
+      <div class="mode-tabs">
+        <button class="mode-btn active" id="mode-text" onclick="setMode('text')">
+          <span class="mode-icon">✏</span>텍스트 입력
+        </button>
+        <button class="mode-btn" id="mode-image" onclick="setMode('image')">
+          <span class="mode-icon">⬡</span>사진 입력
+        </button>
+      </div>
+
+      <div id="panel-text">
+        <div class="section-label">지금 어떤 기분인가요?</div>
+        <textarea class="input-area" id="ai-text-input"
+          placeholder="오늘 기분이나 떠오르는 장면을 자유롭게 적어주세요.&#10;예) 오늘따라 어릴 때 할머니 집 생각이 난다. 마당에 빨래가 널려있고 흙냄새가 났던 그 기억."></textarea>
+      </div>
+
+      <div id="panel-image" style="display:none">
+        <div class="section-label">사진으로 감성 전달</div>
+        <div id="drop-zone" class="drop-zone"
+          ondragover="event.preventDefault();this.classList.add('dragover')"
+          ondragleave="this.classList.remove('dragover')"
+          ondrop="handleDrop(event)">
+          <input type="file" accept="image/*" onchange="handleFileSelect(event)">
+          <div class="drop-icon">↑</div>
+          <div class="drop-hint">
+            <b>클릭하거나 사진을 드래그</b>하세요<br>
+            색감과 밝기에서 감성을 분석합니다
+          </div>
+        </div>
+        <div id="img-preview-area" style="display:none">
+          <div class="img-preview-wrap">
+            <img id="img-preview" class="img-preview" alt="">
+            <button class="img-remove" onclick="removeImage()">✕</button>
+          </div>
+          <div class="img-caption" id="img-caption"></div>
+        </div>
+        <textarea class="input-area" id="img-memo" style="min-height:52px;margin-top:4px"
+          placeholder="사진에서 느끼는 분위기를 간단히 적어도 좋습니다. (선택)"></textarea>
+      </div>
+
+      <button class="analyze-btn" id="analyze-btn" onclick="analyze()">감성 분석하기</button>
+    </div>
+
+    <div id="result-section" style="display:none">
+      <div class="ai-summary" id="r-summary"></div>
+      <div class="section-label">감성 벡터</div>
+      <div id="vec-bars" style="margin-bottom:14px"></div>
+      <div class="section-label">추출된 키워드</div>
+      <div class="kw-tags" id="kw-tags"></div>
+      <div class="done-bar">
+        <div class="done-badge" id="done-badge"></div>
+        <span class="reset-link" onclick="resetStep0()">다시 분석하기</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="flow-label" data-step="1"><span class="flow-step">1</span> 레시피 다이얼 — 조성 비율 조정</div>
+  <div class="card">
+    <div class="dial-row">
+      <div class="dial-item">
+        <div class="dial-label">지속력 — <span id="v-longevity">50</span>%</div>
+        <input type="range" min="0" max="100" value="50" id="d-longevity" step="1" oninput="syncLabel('longevity');render()">
+        <div class="dial-hint">낮으면 탑 노트 중심, 높으면 베이스 노트 강화</div>
+      </div>
+      <div class="dial-item">
+        <div class="dial-label">무게감 — <span id="v-weight">40</span>%</div>
+        <input type="range" min="0" max="100" value="40" id="d-weight" step="1" oninput="syncLabel('weight');render()">
+        <div class="dial-hint">낮으면 드라이·경량, 높으면 크리미·묵직</div>
+      </div>
+      <div class="dial-item">
+        <div class="dial-label">습도감 — <span id="v-humidity">40</span>%</div>
+        <input type="range" min="0" max="100" value="40" id="d-humidity" step="1" oninput="syncLabel('humidity');render()">
+        <div class="dial-hint">낮으면 건조·파우더리, 높으면 그린·촉촉</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="flow-label"><span class="flow-step">2</span> 농도 단계 — 바디 프레임 다이얼</div>
+  <div class="card-conc">
+    <div class="section-label">농도 선택</div>
+    <div class="conc-grid">
+      <button class="conc-btn" data-conc="EDC" onclick="selectConc(this)">
+        <div class="conc-name">EDC</div><div class="conc-pct">2–4%</div><div class="conc-dur">~2h</div>
+      </button>
+      <button class="conc-btn active" data-conc="EDT" onclick="selectConc(this)">
+        <div class="conc-name">EDT</div><div class="conc-pct">5–15%</div><div class="conc-dur">3–4h</div>
+      </button>
+      <button class="conc-btn" data-conc="EDP" onclick="selectConc(this)">
+        <div class="conc-name">EDP</div><div class="conc-pct">15–20%</div><div class="conc-dur">5–8h</div>
+      </button>
+      <button class="conc-btn" data-conc="Parfum" onclick="selectConc(this)">
+        <div class="conc-name">Parfum</div><div class="conc-pct">20–40%</div><div class="conc-dur">8h+</div>
+      </button>
+    </div>
+    <div class="conc-note" id="conc-note">EDT — 일상 사용에 적합한 표준 농도. 에탄올 희석량만 달라집니다.</div>
+  </div>
+
+  <!-- OUTPUT -->
+  <div class="flow-label" style="margin-top:1.5rem;">
+    <span class="flow-step" style="background:rgba(59,109,17,0.12);color:#3B6D11;">→</span> 출력 요약
+  </div>
+  <div class="card">
+    <div class="output-row">
+      <div class="output-cell">
+        <div class="output-key">향 이름</div>
+        <div class="output-val" id="r-name">—</div>
+      </div>
+      <div class="output-cell">
+        <div class="output-key">농도 단계</div>
+        <div class="output-val" id="r-conc">EDT · 10%</div>
+      </div>
+      <div class="output-cell">
+        <div class="output-key">지속 시간</div>
+        <div class="output-val" id="r-dur">3–4h</div>
+      </div>
+    </div>
+    <div class="result-card">
+      <div class="result-desc" id="r-desc">감성을 입력하면 향 설명이 여기에 표시됩니다.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-label">원액 조합 (12종) — 비율</div>
+    <div id="bars"><div class="placeholder-msg">감성 분석 후 원액 비율이 자동으로 산출됩니다.</div></div>
+  </div>
+
+</div>
+<script>
+// ── 원액 정의 ──────────────────────────────────────────────────────────────
+const INGS = [
+  { name:"베르가못",   color:"#BA7517" }, // 0  top    citrus   fresh  bright
+  { name:"레몬그라스", color:"#639922" }, // 1  top    citrus   green  energy
+  { name:"라벤더",     color:"#7F77DD" }, // 2  heart  herbal   calm   cool
+  { name:"로즈",       color:"#D4537E" }, // 3  heart  floral   warm   memory
+  { name:"재스민",     color:"#993556" }, // 4  heart  floral   night  sensual
+  { name:"페티그레인", color:"#3B6D11" }, // 5  heart  green    rural  wood
+  { name:"샌달우드",   color:"#854F0B" }, // 6  base   creamy   warm   home
+  { name:"시더우드",   color:"#5F5E5A" }, // 7  base   dry      urban  woody
+  { name:"패츌리",     color:"#3C3489" }, // 8  base   earthy   past   heavy
+  { name:"베티버",     color:"#444441" }, // 9  base   smoky    sad    dark
+  { name:"바닐라",     color:"#EF9F27" }, // 10 base   sweet    cozy   memory
+  { name:"페트리코르", color:"#1D9E75" }, // 11 top    wet      rural  rain
+];
+
+// ── 감성 사전: 단어 → 12원액 가중치 벡터 ──────────────────────────────────
+// 각 배열은 [베르가못, 레몬그라스, 라벤더, 로즈, 재스민, 페티그레인,
+//            샌달우드, 시더우드, 패츌리, 베티버, 바닐라, 페트리코르]
+const EMOTION_DICT = {
+  // 슬픔·고독
+  "슬프":"슬픔","슬픔":[2,1,8,4,6,2,8,6,5,20,3,2],"눈물":[2,1,10,5,5,2,7,6,4,18,4,3],
+  "외로":"고독","고독":[2,1,12,3,5,3,8,10,5,18,3,2],"쓸쓸":[2,1,10,4,5,3,9,9,5,16,4,2],
+  "우울":[2,1,14,3,5,2,8,8,5,16,3,2],"허전":[2,2,10,4,5,3,9,10,5,15,4,2],
+  "그리":"그리움","그리움":[3,2,8,12,14,4,10,5,8,6,12,2],"보고싶":[3,2,8,12,14,4,10,5,8,6,12,2],
+  "그립":[3,2,8,12,14,4,10,5,8,6,12,2],
+  // 아련·기억
+  "아련":[3,2,6,12,14,5,10,5,8,5,12,3],"추억":[3,2,6,10,12,5,10,5,10,5,14,3],
+  "기억":[3,2,6,10,12,5,10,5,10,5,14,3],"어릴":"어린시절","어린시절":[3,2,5,10,10,6,10,5,10,4,16,4],
+  "옛날":[3,2,5,8,10,6,8,5,12,5,14,4],"예전":[3,2,5,8,10,6,8,5,12,5,14,4],
+  "오래된":[2,2,5,8,10,6,8,6,12,6,12,4],"빛바랜":[2,2,6,10,12,5,10,5,10,5,12,3],
+  // 시골·자연
+  "시골":[3,4,5,4,2,18,8,6,20,5,4,20],"마당":[4,4,5,4,2,16,8,6,18,4,4,18],
+  "흙":[2,2,4,3,2,14,8,6,20,6,3,16],"풀":[4,6,5,4,2,18,6,5,16,4,3,14],
+  "논":[3,4,4,3,2,16,8,6,18,5,3,18],"밭":[3,4,4,3,2,16,8,6,18,5,3,16],
+  "나무":[3,4,5,3,2,16,8,10,14,6,3,10],"숲":[3,5,6,3,3,18,8,10,12,5,3,14],
+  "들판":[4,6,5,3,2,16,6,6,14,4,3,16],"시냇물":[4,5,5,3,2,14,6,6,10,4,3,18],
+  "빗":[3,4,6,3,3,12,6,6,10,5,3,20],"비":[3,4,6,3,3,12,6,6,10,5,3,20],
+  "이슬":[4,5,6,3,3,14,6,6,8,4,3,18],
+  // 도시·현대
+  "도시":[16,14,4,4,2,3,5,12,4,4,4,2],"카페":[14,12,5,5,3,4,6,10,4,4,6,2],
+  "커피":[14,12,4,4,2,4,6,10,4,4,6,2],"거리":[14,12,4,4,2,4,5,12,4,5,4,2],
+  "빌딩":[12,10,4,3,2,3,5,14,4,5,3,2],"지하철":[12,10,4,3,2,3,5,12,4,5,3,2],
+  // 부모님·집
+  "부모":[4,3,8,14,8,6,14,5,6,4,18,3],"엄마":[4,3,8,14,8,6,14,5,6,4,18,3],
+  "어머니":[4,3,8,14,8,6,14,5,6,4,18,3],"아버지":[4,3,6,10,8,8,14,8,6,5,14,4],
+  "아빠":[4,3,6,10,8,8,14,8,6,5,14,4],"집":[4,3,8,12,8,6,14,5,6,4,18,4],
+  "귀가":[5,4,8,12,8,6,14,5,6,4,16,4],"가족":[4,3,8,12,8,6,14,5,6,4,18,3],
+  "할머니":[3,2,6,10,8,8,10,5,14,4,16,4],"할아버지":[3,2,6,8,8,8,10,8,14,5,14,4],
+  // 설렘·사랑
+  "설렘":[14,10,6,16,14,6,8,5,4,3,10,4],"설레":[14,10,6,16,14,6,8,5,4,3,10,4],
+  "사랑":[10,6,6,18,16,4,10,4,5,3,12,3],"두근":[14,10,6,14,14,5,8,5,4,3,10,4],
+  "첫사랑":[14,10,6,16,16,5,8,5,4,3,10,3],"연인":[10,6,5,16,16,4,10,4,5,3,12,3],
+  // 계절
+  "봄":[12,10,6,16,12,10,8,5,4,3,8,10],"봄날":[12,10,6,16,12,10,8,5,4,3,8,10],
+  "여름":[18,18,4,8,8,8,5,6,3,2,4,10],"여름날":[18,18,4,8,8,8,5,6,3,2,4,10],
+  "가을":[6,4,8,8,6,10,12,12,10,8,8,5],"낙엽":[5,3,8,6,6,10,12,12,12,10,8,4],
+  "겨울":[3,2,12,4,4,5,8,14,6,14,8,4],"눈":[3,2,14,4,4,5,8,14,6,12,8,5],
+  // 명상·평온
+  "명상":[4,3,20,4,4,5,16,10,6,6,8,4],"평화":[6,4,16,6,4,6,14,8,6,5,10,6],
+  "고요":[4,3,18,4,4,5,16,10,6,6,8,4],"차분":[4,3,18,4,4,5,16,10,6,6,8,4],
+  "휴식":[5,4,16,6,4,6,16,8,6,5,12,5],"힐링":[5,4,16,6,4,8,14,8,6,4,12,6],
+  // 활기·에너지
+  "활기":[20,18,4,6,6,6,4,6,3,2,4,6],"에너지":[18,18,4,5,5,6,4,6,3,2,4,6],
+  "아침":[16,14,6,6,5,6,5,7,3,2,5,8],"신선":[14,16,6,5,4,8,5,6,3,2,4,10],
+  "상쾌":[14,16,5,5,4,8,5,6,3,2,4,10],
+  // 피로·위안
+  "피곤":[4,3,16,6,5,4,16,8,6,8,14,3],"피로":[4,3,16,6,5,4,16,8,6,8,14,3],
+  "지침":[4,3,16,5,5,4,16,8,6,8,14,3],"위로":[5,4,14,10,6,5,14,6,6,5,16,4],
+  "포근":[4,3,12,12,6,5,16,5,6,4,18,4],"따뜻":[6,4,10,12,6,5,16,5,5,4,18,4],
+  // 불안·긴장
+  "불안":[6,5,16,4,6,4,8,8,6,14,4,4],"긴장":[8,6,14,4,6,4,6,10,5,12,4,4],
+  "걱정":[5,4,16,4,6,4,8,8,6,14,4,4],"두려":[4,3,14,4,5,4,8,8,6,16,4,3],
+  // 분노·강렬
+  "분노":[12,8,4,3,5,4,5,10,8,14,3,3],"화가":[12,8,4,3,5,4,5,10,8,14,3,3],
+  "짜증":[10,8,5,3,4,4,5,10,8,14,3,3],
+  // 바다·물
+  "바다":[10,14,6,4,4,8,5,6,4,4,4,18],"해변":[10,14,5,4,4,8,5,6,4,4,4,18],
+  "파도":[8,12,6,4,4,8,5,6,4,4,4,18],"수영":[10,14,5,4,4,8,5,5,3,3,4,16],
+};
+
+// ── 색상→가중치 매핑 (이미지 분석용) ─────────────────────────────────────
+// H(색조), S(채도), L(명도)로 원액 벡터 생성
+function hslToIngWeights(h, s, l) {
+  // h: 0-360, s: 0-1, l: 0-1
+  const w = new Array(12).fill(5);
+
+  // 명도 기반
+  if (l > 0.7) { w[0]+=8; w[1]+=6; w[2]+=4; }       // 밝음 → 시트러스·라벤더
+  if (l < 0.3) { w[9]+=10; w[7]+=6; w[8]+=6; }       // 어두움 → 베티버·우디
+  if (l >= 0.3 && l <= 0.6) { w[6]+=6; w[10]+=5; }   // 중간 → 샌달우드·바닐라
+
+  // 채도 기반
+  if (s > 0.6) { w[3]+=6; w[4]+=5; w[0]+=5; }        // 채도 높음 → 플로럴·시트러스
+  if (s < 0.2) { w[7]+=6; w[2]+=5; w[9]+=4; }        // 무채색 → 드라이·차분
+
+  // 색조 기반
+  if (h >= 30 && h < 90)  { w[0]+=8; w[1]+=8; w[10]+=4; }  // 노랑·연두 → 시트러스·바닐라
+  if (h >= 90 && h < 150) { w[1]+=8; w[5]+=10; w[11]+=8; } // 초록 → 그린·시골·비
+  if (h >= 150 && h < 200){ w[11]+=10; w[2]+=6; w[7]+=5; } // 청록 → 페트리코르·라벤더
+  if (h >= 200 && h < 260){ w[2]+=8; w[9]+=6; w[7]+=6; }   // 파랑·보라 → 라벤더·차가움
+  if (h >= 260 && h < 320){ w[4]+=8; w[3]+=8; w[8]+=5; }   // 보라·분홍 → 재스민·로즈
+  if (h >= 320 || h < 30) { w[3]+=8; w[0]+=6; w[10]+=6; }  // 빨강·주황 → 로즈·따뜻함
+  if (h >= 20 && h < 50 && s < 0.4) { w[6]+=8; w[10]+=8; w[8]+=6; } // 갈색 계열 → 우디·바닐라
+
+  return w;
+}
+
+// ── 색상 분석: 이미지에서 대표 HSL 추출 ─────────────────────────────────
+function analyzeImageColors(imgEl) {
+  const canvas = document.getElementById('color-canvas');
+  const ctx    = canvas.getContext('2d');
+  const SIZE   = 80;
+  canvas.width = canvas.height = SIZE;
+  ctx.drawImage(imgEl, 0, 0, SIZE, SIZE);
+  const data = ctx.getImageData(0, 0, SIZE, SIZE).data;
+
+  let rSum=0, gSum=0, bSum=0, count=0;
+  for (let i=0; i<data.length; i+=4) {
+    rSum += data[i]; gSum += data[i+1]; bSum += data[i+2]; count++;
+  }
+  const r=rSum/count/255, g=gSum/count/255, b=bSum/count/255;
+
+  const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
+  const l = (max+min)/2;
+  const s = d===0 ? 0 : d/(1-Math.abs(2*l-1));
+  let h=0;
+  if (d!==0) {
+    if (max===r) h=60*(((g-b)/d)%6);
+    else if (max===g) h=60*((b-r)/d+2);
+    else h=60*((r-g)/d+4);
+    if (h<0) h+=360;
+  }
+  return { h, s, l };
+}
+
+// ── 텍스트 분석 ──────────────────────────────────────────────────────────
+function analyzeText(text) {
+  const weights = new Array(12).fill(0);
+  const matched = [];
+  let hits = 0;
+
+  const lower = text.toLowerCase();
+  for (const [word, val] of Object.entries(EMOTION_DICT)) {
+    if (!lower.includes(word)) continue;
+    const vec = Array.isArray(val) ? val : EMOTION_DICT[val];
+    if (!vec) continue;
+    vec.forEach((v, i) => { weights[i] += v; });
+    matched.push(word);
+    hits++;
+  }
+
+  // 매칭이 없으면 기본 중립 벡터
+  if (hits === 0) {
+    return {
+      weights: [8,6,10,8,8,8,10,8,8,8,10,8],
+      keywords: ["일상"],
+      summary: "특별한 감성 단어를 찾지 못했지만, 편안한 중립 향으로 조합했습니다.",
+      vectors: { 시간성:50, 공간성:50, 감정온도:50, 각성:50 }
+    };
+  }
+
+  const total = weights.reduce((a,b)=>a+b,0);
+  const norm  = weights.map(v => Math.round(v/total*100));
+
+  // 감성 벡터 산출 (표시용)
+  const fresh  = (norm[0]+norm[1]+norm[11])/3;          // 시트러스+그린
+  const earthy = (norm[8]+norm[9]+norm[5])/3;            // 흙·우디
+  const warm   = (norm[3]+norm[6]+norm[10])/3;           // 플로럴·크리미
+  const heavy  = (norm[9]+norm[8]+norm[7])/3;            // 어둡고 무거움
+
+  const vectors = {
+    "시간성(과거↔현재)": Math.min(100, Math.round(fresh * 1.5 + 10)),
+    "공간성(자연↔도시)":  Math.min(100, Math.round(100 - earthy * 1.8)),
+    "감정온도(차↔따뜻)": Math.min(100, Math.round(warm * 2.2)),
+    "각성(차분↔활기)":    Math.min(100, Math.round(fresh * 1.8 - heavy * 0.5 + 20)),
+  };
+
+  // 향 이름 생성
+  const dominant = INGS[norm.indexOf(Math.max(...norm))].name;
+  const nameMap = {
+    "베르가못":"아침 햇살 향","레몬그라스":"여름 바람 향","라벤더":"새벽 안개 향",
+    "로즈":"봄날의 기억","재스민":"별빛 아래 향","페티그레인":"비 온 후 마당 향",
+    "샌달우드":"온기의 잔향","시더우드":"고요한 숲 향","패츌리":"오래된 시간 향",
+    "베티버":"깊은 밤 향","바닐라":"따뜻한 부엌 향","페트리코르":"흙비 내린 향",
+  };
+
+  // 요약문
+  const kwStr = matched.slice(0,4).join(', ');
+  const summary = `"${kwStr}" 의 감성에서 ${dominant} 계열이 가장 강하게 도출되었습니다. ` +
+    `${warm>10?'따뜻하고 포근한':''}${fresh>10?' 상쾌하고':''}${heavy>10?' 묵직한':''} 향 구성을 제안합니다.`;
+
+  return { weights: norm, keywords: matched.slice(0,5), summary, vectors, fragName: nameMap[dominant] || "무제의 향" };
+}
+
+// ── 상태 ──────────────────────────────────────────────────────────────────
+let activeConc  = "EDT";
+let currentMode = "text";
+let loadedImg   = null;
+let baseWeights = null;
+let fragName    = "";
+let fragDesc    = "";
+
+const CONC_INFO = {
+  "EDC":    { label:"EDC · 3%",    dur:"~2h",  note:"EDC — 가볍고 청량. 원액 2–4%." },
+  "EDT":    { label:"EDT · 10%",   dur:"3–4h", note:"EDT — 일상 표준 농도. 원액 5–15%." },
+  "EDP":    { label:"EDP · 18%",   dur:"5–8h", note:"EDP — 고농도 잔향. 원액 15–20%." },
+  "Parfum": { label:"Parfum · 30%", dur:"8h+", note:"Parfum — 최고 농도. 원액 20–40%." },
+};
+
+// ── UI ────────────────────────────────────────────────────────────────────
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('panel-text').style.display  = mode==='text'  ? '':'none';
+  document.getElementById('panel-image').style.display = mode==='image' ? '':'none';
+  document.getElementById('mode-text').classList.toggle('active', mode==='text');
+  document.getElementById('mode-image').classList.toggle('active', mode==='image');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadImage(f);
+}
+function handleFileSelect(e) { if(e.target.files[0]) loadImage(e.target.files[0]); }
+function loadImage(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = document.getElementById('img-preview');
+    img.src = ev.target.result;
+    img.onload = () => { loadedImg = img; };
+    document.getElementById('img-caption').textContent = file.name + ' · ' + (file.size/1024).toFixed(0) + 'KB';
+    document.getElementById('drop-zone').style.display = 'none';
+    document.getElementById('img-preview-area').style.display = '';
+  };
+  reader.readAsDataURL(file);
+}
+function removeImage() {
+  loadedImg = null;
+  document.getElementById('img-preview').src = '';
+  document.getElementById('drop-zone').style.display = '';
+  document.getElementById('img-preview-area').style.display = 'none';
+  document.getElementById('drop-zone').querySelector('input').value = '';
+}
+
+function analyze() {
+  let result;
+
+  if (currentMode === 'text') {
+    const text = document.getElementById('ai-text-input').value.trim();
+    if (!text) return;
+    result = analyzeText(text);
+
+  } else {
+    if (!loadedImg) return;
+    const memo = document.getElementById('img-memo').value.trim();
+    const { h, s, l } = analyzeImageColors(loadedImg);
+    const imgWeights = hslToIngWeights(h, s, l);
+
+    // 메모가 있으면 텍스트 분석과 병합
+    let merged = imgWeights;
+    let memoResult = null;
+    if (memo) {
+      memoResult = analyzeText(memo);
+      merged = imgWeights.map((v, i) => v * 0.5 + memoResult.weights[i] * 0.5);
+    }
+    const total = merged.reduce((a,b)=>a+b,0);
+    const norm  = merged.map(v => Math.round(v/total*100));
+
+    const dominant = INGS[norm.indexOf(Math.max(...norm))].name;
+    const lDesc = l>0.65 ? '밝고 환한':'l<0.35' ? '어둡고 깊은':'차분한';
+    const sDesc = s>0.5 ? '선명한':'채도 낮은';
+    result = {
+      weights:  norm,
+      keywords: ['색감 분석', sDesc + ' 색조', lDesc + ' 분위기', ...(memoResult?.keywords||[])].slice(0,5),
+      summary:  `사진의 ${lDesc} ${sDesc} 색감에서 ${dominant} 계열의 향을 도출했습니다.` +
+                (memo ? ` "${memo}" 의 감성도 함께 반영했습니다.` : ''),
+      vectors:  {
+        "밝기(어둠↔밝음)":    Math.round(l * 100),
+        "채도(무채색↔선명)":  Math.round(s * 100),
+        "색온도(차↔따뜻)":    Math.round(h>=30&&h<180 ? (180-h)/1.8 : h>=180&&h<330 ? (h-180)/1.5 : 80),
+        "자연성(인공↔자연)":  Math.round((norm[5]+norm[11]+norm[8])*1.5),
+      },
+      fragName: dominant + '의 향',
+    };
+  }
+
+  baseWeights = result.weights;
+  fragName    = result.fragName || '무제의 향';
+  fragDesc    = result.summary  || '';
+
+  // 감성 벡터 시각화
+  const VEC_COLORS = ["#854F0B","#3B6D11","#993556","#534AB7"];
+  const vecEntries = Object.entries(result.vectors || {});
+  document.getElementById('vec-bars').innerHTML = vecEntries.map(([k,v], i) => `
+    <div class="vec-row">
+      <div class="vec-label" style="font-size:11px">${k}</div>
+      <div class="vec-track"><div class="vec-fill" style="width:${Math.min(v,100)}%;background:${VEC_COLORS[i%4]}"></div></div>
+      <div class="vec-pct">${Math.min(Math.round(v),100)}%</div>
+    </div>`).join('');
+
+  document.getElementById('r-summary').textContent = result.summary;
+  document.getElementById('kw-tags').innerHTML = (result.keywords||[]).map(k =>
+    `<span class="kw-tag">${k}</span>`).join('');
+  document.getElementById('done-badge').textContent = '✓ ' + fragName;
+
+  document.getElementById('input-section').style.display = 'none';
+  document.getElementById('result-section').style.display = '';
+  render();
+
+  setTimeout(() => {
+    document.querySelector('.flow-label[data-step="1"]')
+      ?.scrollIntoView({ behavior:'smooth', block:'start' });
+  }, 200);
+}
+
+function resetStep0() {
+  document.getElementById('input-section').style.display = '';
+  document.getElementById('result-section').style.display = 'none';
+  baseWeights = null; fragName = ''; fragDesc = '';
+  document.getElementById('bars').innerHTML = '<div class="placeholder-msg">감성 분석 후 원액 비율이 자동으로 산출됩니다.</div>';
+  document.getElementById('r-name').textContent = '—';
+  document.getElementById('r-desc').textContent = '감성을 입력하면 향 설명이 여기에 표시됩니다.';
+}
+
+function syncLabel(id) {
+  document.getElementById('v-'+id).textContent = document.getElementById('d-'+id).value;
+}
+
+function render() {
+  if (!baseWeights) return;
+  const longevity = +document.getElementById('d-longevity').value / 100;
+  const weight    = +document.getElementById('d-weight').value    / 100;
+  const humidity  = +document.getElementById('d-humidity').value  / 100;
+
+  let vals = baseWeights.map((v, i) => {
+    let w = v;
+    if (i===0||i===1||i===11) w *= (1.4 - longevity * 0.8);
+    if (i>=6 && i<=10)        w *= (0.6 + longevity * 0.8);
+    if (i===3||i===6||i===10) w *= (0.6 + weight * 0.8);
+    if (i===2||i===7)         w *= (1.3 - weight * 0.6);
+    if (i===4||i===5||i===11) w *= (0.6 + humidity * 0.8);
+    if (i===2||i===7)         w *= (1.2 - humidity * 0.4);
+    return Math.max(w, 0);
+  });
+
+  const total = vals.reduce((a,b)=>a+b,0) || 1;
+  const pcts  = vals.map(v => Math.round(v/total*100));
+
+  const conc = CONC_INFO[activeConc];
+  document.getElementById('r-name').textContent = fragName;
+  document.getElementById('r-conc').textContent = conc.label;
+  document.getElementById('r-dur').textContent  = conc.dur;
+  document.getElementById('r-desc').textContent = fragDesc;
+
+  document.getElementById('bars').innerHTML = INGS.map((ing,i) => `
+    <div class="bar-row">
+      <div class="bar-label">${ing.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pcts[i]}%;background:${ing.color}"></div></div>
+      <div class="bar-pct">${pcts[i]}%</div>
+    </div>`).join('');
+}
+
+function selectConc(btn) {
+  document.querySelectorAll('.conc-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeConc = btn.dataset.conc;
+  document.getElementById('conc-note').textContent = CONC_INFO[activeConc].note;
+  document.getElementById('r-conc').textContent = CONC_INFO[activeConc].label;
+  document.getElementById('r-dur').textContent  = CONC_INFO[activeConc].dur;
+}
+</script>
+</body>
+</html>
